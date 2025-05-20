@@ -13,7 +13,7 @@ import static simulator.Util.*;
 public final class {{NAMECA}}CA implements CAloops2 {
 {{ANONYMOUSLOOP}}
 
-    public int CAmemWidth() {return {{MEMWIDTH}};}
+    public int CAmemWidth() { return {{MEMWIDTH}}; }
 
     @Override
     public ArrayList<String> theLoops(PrShift p,int[][] m) {
@@ -41,7 +41,7 @@ public final class {{NAMECA}}CA implements CAloops2 {
 
     @Override
     public HashMap<String, Locus> fieldLocus() {
-    HashMap<String, Locus> map = new HashMap<>();
+        HashMap<String, Locus> map = new HashMap<>();
 
 {{FIELDLOCUS}}
 
@@ -50,8 +50,10 @@ public final class {{NAMECA}}CA implements CAloops2 {
 
     @Override public HashMap<String, Integer> fieldBitSize() {
         HashMap<String, Integer> map = new HashMap<>();
+
 {{BITSIZE}}
-        return (map);
+
+        return map;
     }
 
     @Override
@@ -63,9 +65,9 @@ public final class {{NAMECA}}CA implements CAloops2 {
 
 {{INITLAYER}}
 
-        return (map);
+        return map;
     }
 
     @Override
-    public int gateCount(){return {{GATECOUNT}};}
+    public int gateCount(){ return {{GATECOUNT}}; }
 }

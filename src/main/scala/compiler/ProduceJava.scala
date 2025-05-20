@@ -68,7 +68,7 @@ trait ProduceJava[U <: InfoNbit[_]] {
         val loadedClassC = customLoader.findClass("compiledMacro." + macroLoopName) //reload ensures that the compiler of main can access the new macros
       }
     }
-    val codeMain: String = javaCodeMain(codeLoopsAnonymous.values.mkString("\n")).replace('#', '$'); //'#' is not a valid char for id in java file
+    val codeMain: String = javaCodeMain("    " + codeLoopsAnonymous.values.mkString("\n    ")).replace('#', '$'); //'#' is not a valid char for id in java file
     val nameCA = nameCA3.capitalize + "CA" // radicalOfVar(paramR(0)) + "CA" //name of the produced java file is equal to the name of the layer wrapping around all the compiled prog
 
     val nameCAjava = nameCA + ".java"
@@ -149,20 +149,22 @@ trait ProduceJava[U <: InfoNbit[_]] {
         }
 
         //we anchor data parameters, result parameters, and constant def layers.
-        val anchor = (anchorParam(shortSigIn, paramD) ::: anchorParam(shortSigOut, paramR) ::: anchorParam(layerNames, layerNames.flatMap(s => tSymbVar(s).locus.deploy(s)))).reverse.mkString(",\n          ")
-        if (anchor.nonEmpty) "    int[] " + anchor + ";" else "" //we may not need to anchor anything.
+        val anchor = (anchorParam(shortSigIn, paramD) ::: anchorParam(shortSigOut, paramR) ::: anchorParam(layerNames, layerNames.flatMap(s => tSymbVar(s).locus.deploy(s)))).reverse.mkString(",\n              ")
+        if (anchor.nonEmpty) "        int[] " + anchor + ";" else "" //we may not need to anchor anything.
       },
       "PROPAGATEFIRSTBIT" -> {
         val callsToPropagate: Seq[String] = paramD.map((s: String) => "p.prepareBit(" + s + ")") //for the moment we do the propagation on all data parameters
         val radius1Out=shortSigOut.filter(tSymbVarSafe(_).k.isRadius1)
 
-        val callsToPropagate2 = radius1Out.map((s: String) => "    p.prepareBit(" + s + ")")
+        val callsToPropagate2 = radius1Out.map((s: String) => "        p.prepareBit(" + s + ")")
         val callsToMirror = radius1Out.map((s: String) => {
           val l = tSymbVar(s).t.asInstanceOf[(Locus, Ring)]._1
-          "    p.mirror(" + s + ",compiler.Locus." + l.javaName + ")"
+          "        p.mirror(" + s + ",compiler.Locus." + l.javaName + ")"
         })
-        if ()
-        callsToMirror.mkString(";\n") + ";\n\n" + callsToPropagate2.mkString(";\n") + ";\n"
+        if (callsToMirror.isEmpty  && callsToPropagate2.isEmpty ) return ""
+        if (callsToMirror.nonEmpty && callsToPropagate2.isEmpty ) return callsToMirror.mkString(";\n") + ";\n"
+        if (callsToMirror.isEmpty  && callsToPropagate2.nonEmpty) return callsToPropagate2.mkString(";\n") + ";\n"
+        callsToMirror.mkString(";\n") + ";\n\n" + callsToPropagate2.mkString(";\n")
       },
       "CALINENUMBER" -> (paramD ::: paramR).head, //There must be at least one param,we need to read it so as to know the length which is the number of CA lines.
       "DECLINITPARAM" -> {
@@ -180,13 +182,13 @@ trait ProduceJava[U <: InfoNbit[_]] {
           // val intReg = (standaloneRegister ++ coalesced.keys).filter(noDollarNorHashtag(_)) //should be declared todo gestion plus precise des dieses
           val boolReg: Iterable[String] = intReg.flatMap((s: String) => deployInt2(s, tSymbVarSafe(s))) //intReg which have a single component are not deployed
 
-          boolReg.toList.sorted.map((s: String) => if (isDelayed(s) || true) s + " = 0" else s).mkString(",\n        ") //todo preciser keski est delayed
+          boolReg.toList.sorted.map((s: String) => if (isDelayed(s) || true) s + " = 0" else s).mkString(",\n            ") //todo preciser keski est delayed
         }
 
         val dip = declInitParam;
-        if (dip.size > 0)
-          "    //initialisation \n" +
-          "    int " + dip + ";" else ""
+        if (dip.nonEmpty)
+          "        //initialisation \n" +
+          "        int " + dip + ";" else ""
       },
       "LOOPBODY" -> {
         /* val t = totalCode
@@ -194,8 +196,9 @@ trait ProduceJava[U <: InfoNbit[_]] {
         //certaine expression se simplifie sur false ou true
 
         // totalCode.map(_.toStringTreeInfix(tSymbVar.asInstanceOf[TabSymb[InfoType[_]]])).grouped(4).map(_.mkString(";")).mkString(";\n ")
-        "            " + totalCodeCoalesced.map(_.toStringTreeInfix(this.asInstanceOf[DataProg[InfoType[_]]]))
-                                           .mkString(";\n            ")
+        "            " +
+          totalCodeCoalesced.map(_.toStringTreeInfix(this.asInstanceOf[DataProg[InfoType[_]]]))
+                            .mkString(";\n            ")
       }
     ))
   }
@@ -237,16 +240,16 @@ trait ProduceJava[U <: InfoNbit[_]] {
       val ints = oneVar._2
       var res = ints.map("m[" + _ + "]").mkString(",")
       if (!isBoolV(oneVar._1))
-        res = " new int[][]{" + res + "}" //we have a 2D array
-      res = oneVar._1 + "=" + res;
+        res = "new int[][]{" + res + "}" //we have a 2D array
+      res = oneVar._1 + " = " + res;
       res
     }
 
     // def javaIntArray(s: String) = (if (isBoolV(s)) ("int [] ") else ("int [][] ")) + s
     def anchorNamed(offset: Map[String, List[Int]]): String = {
       val (offset1D, offset2D) = offset.partition(x => isBoolV(x._1)) //x._2.size == 1)
-      (if (offset1D.nonEmpty) "int[]" + offset1D.map(anchorOneVar(_)).mkString(",") + ";\n" else "") +
-        (if (offset2D.nonEmpty) "int[][]" + offset2D.map(anchorOneVar(_)).mkString(",") + ";\n" else "")
+      (if (offset1D.nonEmpty) "        int[] " + offset1D.map(anchorOneVar).mkString(",\n              ") + ";\n" else "") +
+      (if (offset2D.nonEmpty) "        int[][] " + offset2D.map(anchorOneVar).mkString(",\n                ") + ";\n" else "")
     }
 
     //we use the same template technique as the one used for CAloops
@@ -279,7 +282,7 @@ trait ProduceJava[U <: InfoNbit[_]] {
         ("" + declNotNamed(decompositionLocus))
       },
       "LISTCALL" -> {
-        (theCallCode.reverse.mkString("\n")) + "\n\n\n"
+        "        " + theCallCode.reverse.mkString("\n        ")
       },
       "ANCHORNAMED" -> {
         /** code that anchors named arrays on memory */
@@ -291,8 +294,8 @@ trait ProduceJava[U <: InfoNbit[_]] {
           var codeDecl: List[String] = List()
           for (l: Locus <- allLocus) if (decomposition(l).nonEmpty) {
             val (offset1D, offset2D) = decomposition(l).partition(x => x._1.size == 1) //separates  BoolV which are stored on one plane
-            if (offset1D.nonEmpty) codeDecl ::= "int[]" + offset1D.map(x => anchorOneVar((l.shortName + x._2, x._1))).mkString(",") + ";\n"
-            if (offset2D.nonEmpty) codeDecl ::= "int[][]" + offset2D.map(x => anchorOneVar((l.shortName + x._2, x._1))).mkString(",") + ";\n"
+            if (offset1D.nonEmpty) codeDecl ::= "        int[] " + offset1D.map(x => anchorOneVar((l.shortName + x._2, x._1))).mkString(",\n              ") + ";\n"
+            if (offset2D.nonEmpty) codeDecl ::= "        int[][] " + offset2D.map(x => anchorOneVar((l.shortName + x._2, x._1))).mkString(",\n                ") + ";\n"
           }
           // seedE = new int[][]{m[8], m[9], m[10]};
           codeDecl.mkString("\n")
@@ -313,11 +316,11 @@ trait ProduceJava[U <: InfoNbit[_]] {
           def offsetOneVar(oneVar: (String, List[Int])) = {
             val ints = oneVar._2
             var res = ints.map("" + _).mkString(",")
-            res = "map.put(\"" + oneVar._1 + "\", li(" + res + "));";
+            res = "        map.put(\"" + oneVar._1 + "\", li(" + res + "));"
             res
           }
 
-          offset.map(offsetOneVar(_)).mkString("\n")
+          offset.map(offsetOneVar).mkString("\n")
         }
 
         val spatialOfffsetsInt2 = spatialOfffsetsInt.filter(x => !x._1.startsWith("def"))
@@ -337,7 +340,7 @@ trait ProduceJava[U <: InfoNbit[_]] {
         }
 
         fieldLocus(spatialOfffsetsInt.keys, layerSubProgStrict).map((kv: (String, Locus)) => //we need to know the locus, as soon as  we need to know the bit planes
-          " map.put(\"" + kv._1 + "\"," + "compiler.Locus." + kv._2.javaName + ")").mkString(";\n")
+          "        map.put(\"" + kv._1 + "\"," + "compiler.Locus." + kv._2.javaName + ")").mkString(";\n") + ";"
       },
       "BITSIZE" -> {
         /** number of bits for non boolean variables. */
@@ -348,7 +351,7 @@ trait ProduceJava[U <: InfoNbit[_]] {
         }
 
         fieldBitSize(spatialOfffsetsInt.keys, layerSubProg2).map((kv: (String, Int)) =>
-          " map.put(\"" + kv._1 + "\"," + kv._2 + ")").mkString(";\n") + ";"
+          "        map.put(\"" + kv._1 + "\"," + kv._2 + ")").mkString(";\n") + ";"
       },
       "DISPLAYABLE" -> //theDisplayed contains two kinds of name:aux and segmented, first step should separate the segmented
         {
@@ -364,21 +367,25 @@ trait ProduceJava[U <: InfoNbit[_]] {
       "INITLAYER" -> {
         val iL = initLayer(layerSubProg2)
         iL.map((kv: (String, String)) =>
-          " map.put(\"" + kv._1 + "\",\"" + kv._2 + "\")").mkString(";\n") + ";\n"
+          "        map.put(\"" + kv._1 + "\",\"" + kv._2 + "\")").mkString(";\n") + ";"
       },
       "PREPAREBITS" -> {
         val layers: Map[String, U] = layerSubProg2
 
-        val callsToPropagate2 = layers.keys.map((s: String) => "p.prepareBit(" + s + ")")
+        val callsToPropagate2 = layers.keys.map((s: String) => "        p.prepareBit(" + s + ")")
 
         val callsToMirror = layers.keys.map((s: String) => {
           val l = tSymbVar(s).t.asInstanceOf[(Locus, Ring)]._1
-          "p.mirror(" + s + ",compiler.Locus." + l.javaName + ")"
+          "        p.mirror(" + s + ",compiler.Locus." + l.javaName + ")"
         })
-        callsToMirror.mkString(";") + ";\n" + callsToPropagate2.mkString(";") + ";\n"
+        if (callsToMirror.isEmpty  && callsToPropagate2.isEmpty ) return ""
+        if (callsToMirror.nonEmpty && callsToPropagate2.isEmpty ) return callsToMirror.mkString(";\n") + ";"
+        if (callsToMirror.isEmpty  && callsToPropagate2.nonEmpty) return callsToPropagate2.mkString(";\n") + ";"
+        callsToMirror.mkString(";\n") + ";\n\n" + callsToPropagate2.mkString(";\n") + ";"
       },
       "ANONYMOUSLOOP" -> {
-        codeLoopAnonymous
+        if (codeLoopAnonymous.replace(" ", "").replace("\n", "").isEmpty) ""
+        else codeLoopAnonymous
       }
     ))
   }
