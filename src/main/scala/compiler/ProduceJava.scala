@@ -51,8 +51,8 @@ trait ProduceJava[U <: InfoNbit[_]] {
       val alredyDef: Set[String] =
         if (!new File(macroLoopPath).exists()) //if macro file does not exists, creates it, and initiale its content with a preamble
         {
-          val preambule = "package compiledMacro;\n import simulator.PrShift;\n public class " //this is a brand new set of macros
-          writeFile(macroLoopPath, preambule + macroLoopName + "{\n }") //new compiled java macro will be inserted just before last acolades.
+          val preambule = "package compiledMacro;\nimport simulator.PrShift;\npublic class " //this is a brand new set of macros
+          writeFile(macroLoopPath, preambule + macroLoopName + "{\n}") //new compiled java macro will be inserted just before last acolades.
           new HashSet[String]() //there is no macro yet defined, since the class is non existing (brand new)
         }
         else
@@ -118,10 +118,10 @@ trait ProduceJava[U <: InfoNbit[_]] {
         /** add type to parameters, either int[] or int[][],
          * one dimension is enough for spatial type boolV, two dimensions are needed for other locus
          * //parameters are also passed as 1D array if they are Uint of one bit, and V(). */
-        def javaIntArray(s: String) = (if (needOnlyoneBit(s)) ("int [] ") else ("int [][] ")) + s
+        def javaIntArray(s: String) = (if (needOnlyoneBit(s)) ("int[] ") else ("int[][] ")) + s
 
-        val parameters = (shortSigIn ::: (shortSigOut ::: layerNames)).map(javaIntArray(_))
-        parameters.mkString(",")
+        val parameters = (shortSigIn ::: (shortSigOut ::: layerNames)).map(javaIntArray)
+        parameters.mkString(", ")
       },
       "ANCHORPARAM" -> {
         /** @param shortened name of spatial parameters
@@ -137,8 +137,8 @@ trait ProduceJava[U <: InfoNbit[_]] {
               var j = 0; //j iterates on the indexes of the different scalar componendt
               try while (radicalOfVar(original(i)) == s) { //we scan through the parameter having same radical
                 val crochets = if (needOnlyoneBit(s)) "" else "[" + j + "]"
-                res = original(i) + "=" + s + crochets :: res;
-                j += 1;
+                res = original(i) + " = " + s + crochets :: res
+                j += 1
                 i += 1 //affect each scala component
               } catch {
                 case _: IndexOutOfBoundsException =>
@@ -149,21 +149,22 @@ trait ProduceJava[U <: InfoNbit[_]] {
         }
 
         //we anchor data parameters, result parameters, and constant def layers.
-        val anchor = (anchorParam(shortSigIn, paramD) ::: anchorParam(shortSigOut, paramR) ::: anchorParam(layerNames, layerNames.flatMap(s => tSymbVar(s).locus.deploy(s)))).reverse.mkString(",")
-        if (anchor.size > 0) "int[] " + anchor + ";" else "" //we may not need to anchor anything.
+        val anchor = (anchorParam(shortSigIn, paramD) ::: anchorParam(shortSigOut, paramR) ::: anchorParam(layerNames, layerNames.flatMap(s => tSymbVar(s).locus.deploy(s)))).reverse.mkString(",\n          ")
+        if (anchor.nonEmpty) "    int[] " + anchor + ";" else "" //we may not need to anchor anything.
       },
       "PROPAGATEFIRSTBIT" -> {
         val callsToPropagate: Seq[String] = paramD.map((s: String) => "p.prepareBit(" + s + ")") //for the moment we do the propagation on all data parameters
         val radius1Out=shortSigOut.filter(tSymbVarSafe(_).k.isRadius1)
 
-        val callsToPropagate2 = radius1Out.map((s: String) => "p.prepareBit(" + s + ")")
+        val callsToPropagate2 = radius1Out.map((s: String) => "    p.prepareBit(" + s + ")")
         val callsToMirror = radius1Out.map((s: String) => {
           val l = tSymbVar(s).t.asInstanceOf[(Locus, Ring)]._1
-          "p.mirror(" + s + ",compiler.Locus." + l.javaName + ")"
+          "    p.mirror(" + s + ",compiler.Locus." + l.javaName + ")"
         })
-        callsToMirror.mkString(";") + ";\n" + callsToPropagate2.mkString(";") + "\n"
+        if ()
+        callsToMirror.mkString(";\n") + ";\n\n" + callsToPropagate2.mkString(";\n") + ";\n"
       },
-      "CALINENUMBER" -> (paramD ::: paramR)(0), //There must be at least one param,we need to read it so as to know the length which is the number of CA lines.
+      "CALINENUMBER" -> (paramD ::: paramR).head, //There must be at least one param,we need to read it so as to know the length which is the number of CA lines.
       "DECLINITPARAM" -> {
         /** declares all the variables local to the loops, and initializes them to zero if needed */
         def declInitParam = {
@@ -175,16 +176,17 @@ trait ProduceJava[U <: InfoNbit[_]] {
           }
 
           val testCoalesc = coalesced
-          val intReg = (standaloneRegister ++ coalesced.keys).filter(noHashtag(_)) //should be declared todo gestion plus precise des dieses
+          val intReg = (standaloneRegister ++ coalesced.keys).filter(noHashtag) //should be declared todo gestion plus precise des dieses
           // val intReg = (standaloneRegister ++ coalesced.keys).filter(noDollarNorHashtag(_)) //should be declared todo gestion plus precise des dieses
           val boolReg: Iterable[String] = intReg.flatMap((s: String) => deployInt2(s, tSymbVarSafe(s))) //intReg which have a single component are not deployed
 
-          boolReg.toList.sorted.map((s: String) => if (isDelayed(s) || true) s + "=0" else s).mkString(",") //todo preciser keski est delayed
+          boolReg.toList.sorted.map((s: String) => if (isDelayed(s) || true) s + " = 0" else s).mkString(",\n        ") //todo preciser keski est delayed
         }
 
         val dip = declInitParam;
         if (dip.size > 0)
-          "// initialisation \n int " + dip + ";" else ""
+          "    //initialisation \n" +
+          "    int " + dip + ";" else ""
       },
       "LOOPBODY" -> {
         /* val t = totalCode
@@ -192,7 +194,8 @@ trait ProduceJava[U <: InfoNbit[_]] {
         //certaine expression se simplifie sur false ou true
 
         // totalCode.map(_.toStringTreeInfix(tSymbVar.asInstanceOf[TabSymb[InfoType[_]]])).grouped(4).map(_.mkString(";")).mkString(";\n ")
-        totalCodeCoalesced.map(_.toStringTreeInfix(this.asInstanceOf[DataProg[InfoType[_]]])).grouped(4).map(_.mkString(";")).mkString(";\n ")
+        "            " + totalCodeCoalesced.map(_.toStringTreeInfix(this.asInstanceOf[DataProg[InfoType[_]]]))
+                                           .mkString(";\n            ")
       }
     ))
   }
