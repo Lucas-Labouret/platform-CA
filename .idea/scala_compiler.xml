@@ -4,6 +4,7 @@
     <parameters>
       <parameter value="-opt:none" />
     </parameters>
-    <profile name="sbt 1" modules="platform-CA2,platform-ca2" />
+    <option name="separateProdTestSources" value="true" />
+    <profile name="sbt 1" modules="platform-CA2,platform-CA2.main,platform-CA2.test,platform-ca2" />
   </component>
 </project>
