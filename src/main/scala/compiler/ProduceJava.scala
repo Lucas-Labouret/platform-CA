@@ -68,11 +68,11 @@ trait ProduceJava[U <: InfoNbit[_]] {
         val loadedClassC = customLoader.findClass("compiledMacro." + macroLoopName) //reload ensures that the compiler of main can access the new macros
       }
     }
-    val codeMain: String = javaCodeMain("    " + codeLoopsAnonymous.values.mkString("\n    ")).replace('#', '$'); //'#' is not a valid char for id in java file
+    val codeMain: String = javaCodeMain(codeLoopsAnonymous.values.mkString("\n")).replace('#', '$'); //'#' is not a valid char for id in java file
     val nameCA = nameCA3.capitalize + "CA" // radicalOfVar(paramR(0)) + "CA" //name of the produced java file is equal to the name of the layer wrapping around all the compiled prog
 
     val nameCAjava = nameCA + ".java"
-    writeFile(nameDirCompilCA + nameCAjava, codeMain + "\n") //stores the code of the main (with anonmymous loop)
+    writeFile(nameDirCompilCA + nameCAjava, codeMain) //stores the code of the main (with anonmymous loop)
     val sourceFiles = List(nameDirCompilCA + nameCAjava)
     val compilationSuccess = compileJavaFiles(sourceFiles)
     assert(compilationSuccess, "compilation of main CA:" + nameDirCompilCA + nameCAjava + " a planté, poil au nez")
@@ -161,10 +161,13 @@ trait ProduceJava[U <: InfoNbit[_]] {
           val l = tSymbVar(s).t.asInstanceOf[(Locus, Ring)]._1
           "        p.mirror(" + s + ",compiler.Locus." + l.javaName + ")"
         })
-        if (callsToMirror.isEmpty  && callsToPropagate2.isEmpty ) return ""
-        if (callsToMirror.nonEmpty && callsToPropagate2.isEmpty ) return callsToMirror.mkString(";\n") + ";\n"
-        if (callsToMirror.isEmpty  && callsToPropagate2.nonEmpty) return callsToPropagate2.mkString(";\n") + ";\n"
-        callsToMirror.mkString(";\n") + ";\n\n" + callsToPropagate2.mkString(";\n")
+        val calls : String = (callsToMirror.isEmpty, callsToPropagate2.isEmpty) match {
+          case (true, true) => ""
+          case (false, true) => callsToMirror.mkString(";\n") + ";"
+          case (true, false) => callsToPropagate2.mkString(";\n") + ";"
+          case (false, false) => callsToMirror.mkString(";") + ";\n\n" + callsToPropagate2.mkString(";\n") + ";"
+        }
+        calls
       },
       "CALINENUMBER" -> (paramD ::: paramR).head, //There must be at least one param,we need to read it so as to know the length which is the number of CA lines.
       "DECLINITPARAM" -> {
@@ -188,7 +191,8 @@ trait ProduceJava[U <: InfoNbit[_]] {
         val dip = declInitParam;
         if (dip.nonEmpty)
           "        //initialisation \n" +
-          "        int " + dip + ";" else ""
+          "        int " + dip + ";"
+        else ""
       },
       "LOOPBODY" -> {
         /* val t = totalCode
@@ -248,8 +252,8 @@ trait ProduceJava[U <: InfoNbit[_]] {
     // def javaIntArray(s: String) = (if (isBoolV(s)) ("int [] ") else ("int [][] ")) + s
     def anchorNamed(offset: Map[String, List[Int]]): String = {
       val (offset1D, offset2D) = offset.partition(x => isBoolV(x._1)) //x._2.size == 1)
-      (if (offset1D.nonEmpty) "        int[] " + offset1D.map(anchorOneVar).mkString(",\n              ") + ";\n" else "") +
-      (if (offset2D.nonEmpty) "        int[][] " + offset2D.map(anchorOneVar).mkString(",\n                ") + ";\n" else "")
+      (if (offset1D.nonEmpty) "        int[] " + offset1D.map(anchorOneVar).mkString(",\n              ") + ";" else "") +
+      (if (offset2D.nonEmpty) "        int[][] " + offset2D.map(anchorOneVar).mkString(",\n                ") + ";" else "")
     }
 
     //we use the same template technique as the one used for CAloops
@@ -261,8 +265,8 @@ trait ProduceJava[U <: InfoNbit[_]] {
         /** code that declares all the named arrays 1D and 2D */
         def DeclNamed(offset: Map[String, List[Int]]): String = {
           val (var1D, var2D) = offset.keys.partition(offset(_).size == 1) //we distinguish 1D arrays from 2D arrays.
-          (if (var1D.nonEmpty) "int[]" + var1D.mkString(",") + ";\n" else "") +
-            (if (var2D.nonEmpty) "int[][]" + var2D.mkString(",") + ";\n" else "")
+          (if (var1D.nonEmpty) "int[]" + var1D.mkString(",\n          ") + ";" else "") +
+            (if (var2D.nonEmpty) "int[][]" + var2D.mkString(",\n          ") + ";" else "")
         }
 
         ("" + DeclNamed(spatialOfffsetsInt))
@@ -275,8 +279,8 @@ trait ProduceJava[U <: InfoNbit[_]] {
           for (l: Locus <- all2DLocus) {
             var2D = var2D ++ (0 until decomposition(l).size).map(l.shortName + _)
           }
-          (if (var1D.nonEmpty) "int[] " + var1D.mkString(",") + ";\n" else "") +
-            (if (var2D.nonEmpty) "int[][] " + var2D.mkString(",") + ";\n" else "")
+          (if (var1D.nonEmpty) "int[] " + var1D.mkString(",\n          ") + ";" else "") +
+            (if (var2D.nonEmpty) "int[][] " + var2D.mkString(",\n          ") + ";" else "")
         }
 
         ("" + declNotNamed(decompositionLocus))
@@ -294,11 +298,11 @@ trait ProduceJava[U <: InfoNbit[_]] {
           var codeDecl: List[String] = List()
           for (l: Locus <- allLocus) if (decomposition(l).nonEmpty) {
             val (offset1D, offset2D) = decomposition(l).partition(x => x._1.size == 1) //separates  BoolV which are stored on one plane
-            if (offset1D.nonEmpty) codeDecl ::= "        int[] " + offset1D.map(x => anchorOneVar((l.shortName + x._2, x._1))).mkString(",\n              ") + ";\n"
-            if (offset2D.nonEmpty) codeDecl ::= "        int[][] " + offset2D.map(x => anchorOneVar((l.shortName + x._2, x._1))).mkString(",\n                ") + ";\n"
+            if (offset1D.nonEmpty) codeDecl ::= "        int[] " + offset1D.map(x => anchorOneVar((l.shortName + x._2, x._1))).mkString(",\n              ") + ";"
+            if (offset2D.nonEmpty) codeDecl ::= "        int[][] " + offset2D.map(x => anchorOneVar((l.shortName + x._2, x._1))).mkString(",\n                ") + ";"
           }
           // seedE = new int[][]{m[8], m[9], m[10]};
-          codeDecl.mkString("\n")
+          codeDecl.mkString("\n\n")
         }
 
         anchorNotNamed(decompositionLocus)
@@ -378,10 +382,13 @@ trait ProduceJava[U <: InfoNbit[_]] {
           val l = tSymbVar(s).t.asInstanceOf[(Locus, Ring)]._1
           "        p.mirror(" + s + ",compiler.Locus." + l.javaName + ")"
         })
-        if (callsToMirror.isEmpty  && callsToPropagate2.isEmpty ) return ""
-        if (callsToMirror.nonEmpty && callsToPropagate2.isEmpty ) return callsToMirror.mkString(";\n") + ";"
-        if (callsToMirror.isEmpty  && callsToPropagate2.nonEmpty) return callsToPropagate2.mkString(";\n") + ";"
-        callsToMirror.mkString(";\n") + ";\n\n" + callsToPropagate2.mkString(";\n") + ";"
+        val calls : String = (callsToMirror.isEmpty, callsToPropagate2.isEmpty) match {
+          case (true, true) => ""
+          case (false, true) => callsToMirror.mkString(";\n") + ";"
+          case (true, false) => callsToPropagate2.mkString(";\n") + ";"
+          case (false, false) => callsToMirror.mkString(";\n") + ";\n\n" + callsToPropagate2.mkString(";\n") + ";"
+        }
+        calls
       },
       "ANONYMOUSLOOP" -> {
         if (codeLoopAnonymous.replace(" ", "").replace("\n", "").isEmpty) ""
@@ -457,82 +464,74 @@ trait ProduceJava[U <: InfoNbit[_]] {
             //check that data anr result are all with #
              paramCode=concatCallCode ++ paramCode
             System.out.println("concat") //c'est standard
+          } else {
+            val spatialParam = shortenedSig(dataParam ::: resultParam)
+            val bitSigSafe = spatialParam.map(tSymbVarSafe(_).nb)
+            val spatialSigSafe = spatialParam.map(tSymbVarSafe(_).t.asInstanceOf[(Locus, Ring)])
+            /** for each radical, the number of effective parameter with identical radical. Carefull,if it is 6, it does not imply that we have a transfer, it could be a UnitE with 2 bits for example */
+            val densityDirectlyMeasured: List[Int] = spatialParam.map(s => params.filter(radicalOfVar(_) == (radicalOfVar(s))).size) //on teste l'egalité pour eviter les pb avc les prefixes.
+            assert(densityDirectlyMeasured.sum == params.size, "regardez si y a pas un nom de parametre qui est suffixe d'un autre" + params.size + "neq" + densityDirectlyMeasured.sum)
+
+            for (((spatialType, nbit), densityDirect) <- spatialSigSafe zip bitSigSafe zip densityDirectlyMeasured) { //retrieve spatial type and  bitSize   of parameters.
+              val locusParamPossiblyWrong: Locus = spatialType._1 //locus is wrong because it is computed from the name of the effective parameter. It is not to be trusted, when broadcasting is done.
+              var densityParamPossiblyWrong = nbit * locusParamPossiblyWrong.density //locus is wrong implies density is wrong too
+              //pour elt, densityParamPossiblyWrong is wrong, because we pass only one of the numerous bits forming an uint, so we take intoaccount the density directly measured
+
+              //we identify wether the current parameter is a component.
+              val isComponent: Boolean = {
+                nbit > 1 && //todo test removing this, because integer can have a single bit==>  test prog with one bit integer
+                  spatialType._2 != B() && //we take components of either UI or SI
+                  densityDirect * nbit == densityParamPossiblyWrong //density possibly wrong is density of parameter before taking a component.
+              }
+
+              if (isComponent) {
+                val rad = radicalOfVar(params(i))
+                Util.checkSingleComponentNumber(params.filter(radicalOfVar(_)==rad))
+                val component = componentNumber(params(i))
+                paramCode = "copy(" + rad + "," + component + "," + nbit + ")" :: paramCode
+                i+=densityDirect
+              } else {
+                if (densityParamPossiblyWrong > densityDirect) densityParamPossiblyWrong = densityDirect  //je sais plus trop pourquoi
+                if (spatialType == (V(), B()) && densityDirect < 6) { //we can have seedDist$2 passed to a boolV, therefore, we should transform it into seedDist[2]
+                  paramCode = radicalOfVarIntComp(params(i)) :: paramCode; //this is what is done by radicalOfVarIntComp
+                  i += 1
+                }
+                //until now we applied same processing wether it is a name or a heap variable
+                else {
+                  /** we look at the type of effective parameter, in order to find the type of the formal parameter */
+                  val infoParamEF = tSymbVarSafe(radicalOfVar(params(i)))
+                  val locusParamEF = infoParamEF.locus //this does not work, because effective parameter has been obtained by duplication using a direct interpretation of broadcast
+                  val nbitParamEF = infoParamEF.nb //since we directly measure how much bits are sent in the effective parameters,
+                  // we have to take the number of bits into account.
+                  if (!locusParamPossiblyWrong.isTransfer && densityDirect / nbitParamEF == 6 /* !locusParamEf.isTransfer*/ ) //we detect that we have done a broacast,
+                    if (spatialType == (V(), B())) {
+                      paramCode = "broadcaaast(" + radicalOfVar(params(i)) + ")" :: paramCode; i += densityDirect
+                    }
+                    else {
+                      paramCode = "broadcaast33(" +nbitParamEF+","+ 6 / locusParamPossiblyWrong.density + "," + radicalOfVar(params(i)) + ")" :: paramCode; i += densityDirect
+                    }
+                  //we prooceed differently depending wether the params are mem (isheap) or name of fields
+                  else if (isHeap(params(i))) { //its a "mem[x]
+                    var indexesMem: List[Int] = List()
+                    for (j <- 0 until densityParamPossiblyWrong) { //iterate over the nbit scalar parameters of the form mem[2]
+                      indexesMem = adress(params(i)) :: indexesMem; i += 1
+                    } //builds the list of memory offset associated to the locus
+                    indexesMem = indexesMem.reverse
+                    if (!decompositionLocus(locusParamPossiblyWrong).contains(indexesMem)) { //check wether that array2D of memory slices has already been used
+                      val newMapOfLocus = decompositionLocus(locusParamPossiblyWrong) + (indexesMem -> decompositionLocus(locusParamPossiblyWrong).size)
+                      decompositionLocus = decompositionLocus + (locusParamPossiblyWrong -> newMapOfLocus)
+                    }
+                    paramCode = locusParamPossiblyWrong.shortName + (decompositionLocus(locusParamPossiblyWrong)(indexesMem)) :: paramCode //name of formal paramer is locus plus rank stored in decompositionLocus
+                  }
+                  else //its not  a mem
+                  {
+                    paramCode = radicalOfVar(params(i)) :: paramCode;
+                    i += densityParamPossiblyWrong
+                  }
+                }
+              }
+            }
           }
-
-
-
-          else{
-
-
-          val spatialParam = shortenedSig(dataParam ::: resultParam)
-          val bitSigSafe = spatialParam.map(tSymbVarSafe(_).nb)
-          val spatialSigSafe = spatialParam.map(tSymbVarSafe(_).t.asInstanceOf[(Locus, Ring)])
-          /** for each radical, the number of effective parameter with identical radical. Carefull,if it is 6, it does not imply that we have a transfer, it could be a UnitE with 2 bits for example */
-          val densityDirectlyMeasured: List[Int] = spatialParam.map(s => params.filter(radicalOfVar(_) == (radicalOfVar(s))).size) //on teste l'egalité pour eviter les pb avc les prefixes.
-          assert(densityDirectlyMeasured.sum == params.size, "regardez si y a pas un nom de parametre qui est suffixe d'un autre" + params.size + "neq" + densityDirectlyMeasured.sum)
-
-          for (((spatialType, nbit), densityDirect) <- spatialSigSafe zip bitSigSafe zip densityDirectlyMeasured) { //retrieve spatial type and  bitSize   of parameters.
-            val locusParamPossiblyWrong: Locus = spatialType._1 //locus is wrong because it is computed from the name of the effective parameter. It is not to be trusted, when broadcasting is done.
-            var densityParamPossiblyWrong = nbit * locusParamPossiblyWrong.density //locus is wrong implies density is wrong too
-            //pour elt, densityParamPossiblyWrong is wrong, because we pass only one of the numerous bits forming an uint, so we take intoaccount the density directly measured
-
-
-            //we identify wether the current parameter is a component.
-            val isComponent: Boolean = {
-              nbit > 1 && //todo test removing this, because integer can have a single bit==>  test prog with one bit integer
-                spatialType._2 != B() && //we take components of either UI or SI
-                densityDirect * nbit == densityParamPossiblyWrong //density possibly wrong is density of parameter before taking a component.
-            }
-
-
-            if (isComponent) {
-              val rad = radicalOfVar(params(i))
-              Util.checkSingleComponentNumber(params.filter(radicalOfVar(_)==rad))
-              val component = componentNumber(params(i))
-              paramCode = "copy(" + rad + "," + component + "," + nbit + ")" :: paramCode
-              i+=densityDirect
-            }
-            else
-            { if (densityParamPossiblyWrong > densityDirect)
-              densityParamPossiblyWrong = densityDirect  //je sais plus trop pourquoi
-              if (spatialType == (V(), B()) && densityDirect < 6) { //we can have seedDist$2 passed to a boolV, therefore, we should transform it into seedDist[2]
-                paramCode = radicalOfVarIntComp(params(i)) :: paramCode; //this is what is done by radicalOfVarIntComp
-                i += 1
-              }
-              //until now we applied same processing wether it is a name or a heap variable
-              else {
-                /** we look at the type of effective parameter, in order to find the type of the formal parameter */
-                val infoParamEF = tSymbVarSafe(radicalOfVar(params(i)))
-                val locusParamEF = infoParamEF.locus //this does not work, because effective parameter has been obtained by duplication using a direct interpretation of broadcast
-                val nbitParamEF = infoParamEF.nb //since we directly measure how much bits are sent in the effective parameters,
-                // we have to take the number of bits into account.
-                if (!locusParamPossiblyWrong.isTransfer && densityDirect / nbitParamEF == 6 /* !locusParamEf.isTransfer*/ ) //we detect that we have done a broacast,
-                  if (spatialType == (V(), B())) {
-                    paramCode = "broadcaaast(" + radicalOfVar(params(i)) + ")" :: paramCode; i += densityDirect
-                  }
-                  else {
-                    paramCode = "broadcaast33(" +nbitParamEF+","+ 6 / locusParamPossiblyWrong.density + "," + radicalOfVar(params(i)) + ")" :: paramCode; i += densityDirect
-                  }
-                //we prooceed differently depending wether the params are mem (isheap) or name of fields
-                else if (isHeap(params(i))) { //its a "mem[x]
-                  var indexesMem: List[Int] = List()
-                  for (j <- 0 until densityParamPossiblyWrong) { //iterate over the nbit scalar parameters of the form mem[2]
-                    indexesMem = adress(params(i)) :: indexesMem; i += 1
-                  } //builds the list of memory offset associated to the locus
-                  indexesMem = indexesMem.reverse
-                  if (!decompositionLocus(locusParamPossiblyWrong).contains(indexesMem)) { //check wether that array2D of memory slices has already been used
-                    val newMapOfLocus = decompositionLocus(locusParamPossiblyWrong) + (indexesMem -> decompositionLocus(locusParamPossiblyWrong).size)
-                    decompositionLocus = decompositionLocus + (locusParamPossiblyWrong -> newMapOfLocus)
-                  }
-                  paramCode = locusParamPossiblyWrong.shortName + (decompositionLocus(locusParamPossiblyWrong)(indexesMem)) :: paramCode //name of formal paramer is locus plus rank stored in decompositionLocus
-                }
-                else //its not  a mem
-                {
-                  paramCode = radicalOfVar(params(i)) :: paramCode;
-                  i += densityParamPossiblyWrong
-                }
-              }
-            }}}
           /** fundef if recompiled */
           val progCalled: DataProgLoop[U] = subDataProgs.getOrElse(call.procName, null) //gets the called dataProg, we won't be able to do that, when doing modular compilation.
           // CA loops can  contain layers.

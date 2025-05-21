@@ -48,7 +48,8 @@ public final class {{NAMECA}}CA implements CAloops2 {
         return map;
     }
 
-    @Override public HashMap<String, Integer> fieldBitSize() {
+    @Override
+    public HashMap<String, Integer> fieldBitSize() {
         HashMap<String, Integer> map = new HashMap<>();
 
 {{BITSIZE}}
